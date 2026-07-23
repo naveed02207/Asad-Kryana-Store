@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, doc, query, where, orderBy } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { api } from '../../lib/api';
 import { Customer, KhataTransaction } from '../../types';
 import { Plus, Search, User, Wallet, History } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -29,8 +28,8 @@ export function Customers() {
 
   const fetchCustomers = async () => {
     try {
-      const snap = await getDocs(collection(db, 'customers'));
-      setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Customer)));
+      const data = await api.getCustomers();
+      setCustomers(data);
     } catch (error) {
       console.error("Error fetching customers", error);
     } finally {
@@ -41,7 +40,7 @@ export function Customers() {
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, 'customers'), {
+      await api.addCustomer({
         ...customerFormData,
         balance: 0,
         createdAt: Date.now()
@@ -61,20 +60,12 @@ export function Customers() {
     if (amount <= 0) return alert("Amount must be greater than 0");
 
     try {
-      const newBalance = khataType === 'credit' 
-        ? selectedCustomer.balance + amount 
-        : selectedCustomer.balance - amount;
-
-      await updateDoc(doc(db, 'customers', selectedCustomer.id), {
-        balance: newBalance
-      });
-
-      await addDoc(collection(db, 'khata_transactions'), {
+      await api.addKhataTransaction({
         customerId: selectedCustomer.id,
         amount,
         type: khataType,
         description: khataType === 'payment' ? 'Payment Received' : 'Udhaar Added',
-        date: Date.now()
+        date: new Date().toISOString()
       });
 
       setIsKhataModalOpen(false);
@@ -88,13 +79,8 @@ export function Customers() {
   const viewHistory = async (customer: Customer) => {
     setSelectedCustomer(customer);
     try {
-      const q = query(
-        collection(db, 'khata_transactions'), 
-        where('customerId', '==', customer.id),
-        orderBy('date', 'desc')
-      );
-      const snap = await getDocs(q);
-      setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as KhataTransaction)));
+      const data = await api.getKhata(customer.id);
+      setTransactions(data);
       setIsHistoryOpen(true);
     } catch (error) {
       alert("Failed to fetch history");

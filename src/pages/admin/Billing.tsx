@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, addDoc, doc, updateDoc, increment } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { api } from '../../lib/api';
 import { Product, Customer, OrderItem } from '../../types';
 import { Search, ShoppingCart, Plus, Minus, X, Printer, UserPlus } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -8,6 +7,7 @@ import { cn } from '../../lib/utils';
 export function Billing() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [settings, setSettings] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -22,13 +22,15 @@ export function Billing() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [prodSnap, custSnap] = await Promise.all([
-          getDocs(collection(db, 'products')),
-          getDocs(collection(db, 'customers'))
+        const [prodData, custData, settingsData] = await Promise.all([
+          api.getProducts(),
+          api.getCustomers(),
+          api.getSettings()
         ]);
         
-        setProducts(prodSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
-        setCustomers(custSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer)));
+        setProducts(prodData);
+        setCustomers(custData);
+        setSettings(settingsData);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -97,46 +99,28 @@ export function Billing() {
     try {
       const orderData = {
         customerId: selectedCustomer?.id || null,
+        customerName: selectedCustomer?.name || 'Walk-in',
         items: cart,
         subtotal,
         discount,
         total,
         paidAmount: amountPaid,
         paymentMethod,
-        date: Date.now()
+        date: new Date().toISOString()
       };
 
-      await addDoc(collection(db, 'orders'), orderData);
+      await api.checkout(orderData);
 
-      // Update Stock
-      for (const item of cart) {
-        const productRef = doc(db, 'products', item.productId);
-        await updateDoc(productRef, {
-          stock: increment(-item.quantity)
-        });
-      }
-
-      // Update Khata if needed
-      if (paymentMethod === 'khata' && selectedCustomer) {
-        const dueAmount = total - amountPaid;
-        if (dueAmount > 0) {
-          const custRef = doc(db, 'customers', selectedCustomer.id);
-          await updateDoc(custRef, {
-            balance: increment(dueAmount)
-          });
-          
-          await addDoc(collection(db, 'khata_transactions'), {
-            customerId: selectedCustomer.id,
-            amount: dueAmount,
-            type: 'credit',
-            description: 'Store Purchase',
-            date: Date.now()
-          });
-        }
-      }
-
-      printReceipt(orderData);
+      printReceipt(orderData, selectedCustomer);
       
+      // Refresh inventory and customers to get latest stock and balances
+      const [prodData, custData] = await Promise.all([
+        api.getProducts(),
+        api.getCustomers()
+      ]);
+      setProducts(prodData);
+      setCustomers(custData);
+
       // Reset POS
       setCart([]);
       setSelectedCustomer(null);
@@ -151,50 +135,64 @@ export function Billing() {
     }
   };
 
-  const printReceipt = (orderData: any) => {
+  const printReceipt = (orderData: any, customer: Customer | null) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const itemsHtml = orderData.items.map((item: any) => `
-      <tr>
-        <td style="padding: 4px 0;">${item.name}</td>
-        <td style="text-align: right;">${item.quantity} x ${item.price}</td>
-        <td style="text-align: right;">${item.total}</td>
-      </tr>
-    `).join('');
-
     const html = `
+      <!DOCTYPE html>
       <html>
         <head>
           <title>Receipt - Asad Karyana</title>
           <style>
-            body { font-family: monospace; padding: 20px; max-width: 300px; margin: 0 auto; }
-            h2 { text-align: center; margin-bottom: 5px; }
-            p { text-align: center; margin: 0; font-size: 12px; }
-            .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
-            table { width: 100%; border-collapse: collapse; font-size: 14px; }
-            th { text-align: left; padding-bottom: 5px; border-bottom: 1px dashed #000; }
-            .totals { margin-top: 10px; font-size: 14px; }
-            .totals div { display: flex; justify-content: space-between; margin: 2px 0; }
-            .bold { font-weight: bold; }
+            @page { margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              padding: 10px; 
+              max-width: 300px; 
+              margin: 0 auto; 
+              font-size: 12px;
+              color: #000;
+            }
+            h2 { text-align: center; margin: 0 0 5px 0; font-size: 16px; font-weight: bold; text-transform: uppercase; }
+            p { text-align: center; margin: 0; font-size: 12px; line-height: 1.2; }
+            .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { text-align: left; padding-bottom: 4px; border-bottom: 1px dashed #000; font-weight: normal; }
+            td { padding: 4px 0; vertical-align: top; }
+            .text-right { text-align: right; }
+            .totals { margin-top: 8px; font-size: 12px; }
+            .totals div { display: flex; justify-content: space-between; margin: 3px 0; }
+            .bold { font-weight: bold; font-size: 14px; }
+            .center { text-align: center; }
+            .qr-container { text-align: center; margin-top: 15px; }
+            .qr-img { width: 120px; height: 120px; margin: 0 auto; display: block; }
           </style>
         </head>
         <body>
           <h2>Asad Karyana Store</h2>
           <p>Main Market, Local Area</p>
           <p>Date: ${new Date(orderData.date).toLocaleString()}</p>
-          ${orderData.customerId ? `<p>Customer: ${selectedCustomer?.name}</p>` : ''}
+          ${customer ? `<p style="margin-top:4px;">Customer: <b>${customer.name}</b></p>` : ''}
           <div class="divider"></div>
           <table>
             <thead>
               <tr>
                 <th>Item</th>
-                <th style="text-align: right;">Qty</th>
-                <th style="text-align: right;">Total</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Price</th>
+                <th class="text-right">Total</th>
               </tr>
             </thead>
             <tbody>
-              ${itemsHtml}
+              ${orderData.items.map((item: any) => `
+                <tr>
+                  <td>${item.name}</td>
+                  <td class="text-right">${item.quantity}</td>
+                  <td class="text-right">${item.price}</td>
+                  <td class="text-right">${item.total}</td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
           <div class="divider"></div>
@@ -204,12 +202,37 @@ export function Billing() {
             <div class="bold"><span>Total:</span><span>Rs ${orderData.total}</span></div>
             <div class="divider"></div>
             <div><span>Paid:</span><span>Rs ${orderData.paidAmount}</span></div>
-            <div><span>Payment Mode:</span><span style="text-transform: uppercase;">${orderData.paymentMethod}</span></div>
+            <div><span>Payment:</span><span style="text-transform: uppercase;">${orderData.paymentMethod}</span></div>
+            ${orderData.paymentMethod === 'khata' && customer ? `
+              <div class="divider"></div>
+              <div><span>Previous Balance:</span><span>Rs ${customer.balance}</span></div>
+              <div><span>Added to Khata:</span><span>Rs ${orderData.total - orderData.paidAmount}</span></div>
+              <div class="bold"><span>New Balance:</span><span>Rs ${customer.balance + (orderData.total - orderData.paidAmount)}</span></div>
+            ` : ''}
           </div>
           <div class="divider"></div>
-          <p>Thank you for shopping with us!</p>
+          <p class="center" style="margin-bottom: 10px;">Thank you for shopping with us!</p>
+          
+          <div class="qr-container">
+            <p style="font-weight: bold; margin-bottom: 5px;">Pay via QR Code</p>
+            <img id="qrImage" class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`Bank: ${settings.bank_name || 'N/A'} | Title: ${settings.account_title || 'N/A'} | Acc/Raast: ${settings.account_number || 'N/A'} | Bill Amount: Rs. ${orderData.total}`)}" alt="Payment QR" />
+            <div style="margin-top: 8px; font-size: 11px;">
+              <p>Bank: <span style="font-weight:bold">${settings.bank_name || 'N/A'}</span></p>
+              <p>Title: <span style="font-weight:bold">${settings.account_title || 'N/A'}</span></p>
+              <p>Acc/Raast: <span style="font-weight:bold">${settings.account_number || 'N/A'}</span></p>
+            </div>
+          </div>
           <script>
-            window.onload = function() { window.print(); window.close(); }
+            var img = document.getElementById('qrImage');
+            function doPrint() {
+              window.print();
+            }
+            if (img.complete) {
+              doPrint();
+            } else {
+              img.onload = doPrint;
+              img.onerror = doPrint;
+            }
           </script>
         </body>
       </html>

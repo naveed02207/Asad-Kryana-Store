@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { api } from '../../lib/api';
 import { Order } from '../../types';
 import { FileDown, Calendar, Search } from 'lucide-react';
 import { format, startOfDay, endOfDay } from 'date-fns';
@@ -17,18 +16,9 @@ export function Reports() {
     
     setLoading(true);
     try {
-      const start = startOfDay(new Date(startDate)).getTime();
-      const end = endOfDay(new Date(endDate)).getTime();
-
-      const q = query(
-        collection(db, 'orders'),
-        where('date', '>=', start),
-        where('date', '<=', end),
-        orderBy('date', 'desc')
-      );
-
-      const snap = await getDocs(q);
-      setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
+      // Just pass raw dates, let API handle it
+      const data = await api.getReports(startDate, endDate);
+      setOrders(data);
       setSearched(true);
     } catch (error) {
       console.error("Failed to fetch orders", error);

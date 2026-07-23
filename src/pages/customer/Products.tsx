@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { api } from '../../lib/api';
 import { Product } from '../../types';
 import { Search } from 'lucide-react';
 
@@ -12,8 +11,8 @@ export function CustomerProducts() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const snap = await getDocs(collection(db, 'products'));
-        setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
+        const data = await api.getProducts();
+        setProducts(data);
       } catch (error) {
         console.error("Error fetching products", error);
       } finally {

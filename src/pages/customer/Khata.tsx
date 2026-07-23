@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { api } from '../../lib/api';
 import { KhataTransaction, Customer } from '../../types';
 import { Wallet, History } from 'lucide-react';
 import { format } from 'date-fns';
@@ -14,26 +13,15 @@ export function CustomerKhata() {
   useEffect(() => {
     const fetchKhata = async () => {
       try {
-        // Fetch first customer for demo since auth is removed
-        const qCust = query(collection(db, 'customers'), limit(1));
-        const snapCust = await getDocs(qCust);
+        // Fetch customers to get the first one for demo
+        const customers = await api.getCustomers();
         
-        if (!snapCust.empty) {
-          const custData = { id: snapCust.docs[0].id, ...snapCust.docs[0].data() } as Customer;
+        if (customers.length > 0) {
+          const custData = customers[0];
           setCustomerInfo(custData);
           
-          const qTrans = query(
-            collection(db, 'khata_transactions'),
-            orderBy('date', 'desc')
-          );
-          const snapTrans = await getDocs(qTrans);
-          
-          // Filter by customerId manually since we don't have a composite index set up
-          const filteredTrans = snapTrans.docs
-            .map(d => ({ id: d.id, ...d.data() } as KhataTransaction))
-            .filter(t => t.customerId === custData.id);
-            
-          setTransactions(filteredTrans);
+          const transData = await api.getKhata(custData.id);
+          setTransactions(transData);
         }
       } catch (error) {
         console.error("Error fetching khata", error);

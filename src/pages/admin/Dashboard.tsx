@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
-import { startOfDay, endOfDay } from 'date-fns';
+import { api } from '../../lib/api';
+import { startOfDay, endOfDay, format } from 'date-fns';
 import { Order, Product } from '../../types';
 import { TrendingUp, ShoppingCart, DollarSign, Package } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -18,17 +17,10 @@ export function Dashboard() {
       setLoading(true);
       try {
         const today = new Date();
-        const start = startOfDay(today).getTime();
-        const end = endOfDay(today).getTime();
+        const startDate = format(today, 'yyyy-MM-dd');
+        const endDate = format(today, 'yyyy-MM-dd');
 
-        const q = query(
-          collection(db, 'orders'),
-          where('date', '>=', start),
-          where('date', '<=', end)
-        );
-
-        const querySnapshot = await getDocs(q);
-        const orders = querySnapshot.docs.map(doc => doc.data() as Order);
+        const orders: Order[] = await api.getReports(startDate, endDate);
 
         let total = 0;
         const productCounts: Record<string, number> = {};
@@ -43,7 +35,9 @@ export function Dashboard() {
           hourlySales[timeLabel] = (hourlySales[timeLabel] || 0) + order.total;
 
           order.items.forEach(item => {
-            productCounts[item.name] = (productCounts[item.name] || 0) + item.quantity;
+            const productName = item.name || `Product ${item.productId || item.id || 'Unknown'}`;
+            const quantity = Number(item.quantity || item.qty || 1);
+            productCounts[productName] = (productCounts[productName] || 0) + quantity;
           });
         });
 

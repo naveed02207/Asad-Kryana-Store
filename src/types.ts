@@ -33,7 +33,7 @@ export interface KhataTransaction {
   amount: number;
   type: 'credit' | 'payment';
   description: string;
-  date: number;
+  date: number | string;
 }
 
 export interface OrderItem {
@@ -53,5 +53,5 @@ export interface Order {
   total: number;
   paidAmount: number;
   paymentMethod: 'cash' | 'khata';
-  date: number;
+  date: number | string;
 }

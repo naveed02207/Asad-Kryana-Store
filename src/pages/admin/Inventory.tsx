@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { api } from '../../lib/api';
 import { Product } from '../../types';
 import { Plus, Edit2, Trash2, Search } from 'lucide-react';
 
@@ -20,8 +19,8 @@ export function Inventory() {
 
   const fetchProducts = async () => {
     try {
-      const snap = await getDocs(collection(db, 'products'));
-      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
+      const data = await api.getProducts();
+      setProducts(data);
     } catch (error) {
       console.error("Error fetching products", error);
     } finally {
@@ -59,9 +58,9 @@ export function Inventory() {
 
     try {
       if (editingProduct) {
-        await updateDoc(doc(db, 'products', editingProduct.id), data);
+        await api.updateProduct(editingProduct.id, data);
       } else {
-        await addDoc(collection(db, 'products'), data);
+        await api.addProduct(data);
       }
       setIsModalOpen(false);
       fetchProducts();
@@ -74,7 +73,7 @@ export function Inventory() {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
     try {
-      await deleteDoc(doc(db, 'products', id));
+      await api.deleteProduct(id);
       fetchProducts();
     } catch (error) {
       console.error("Error deleting", error);

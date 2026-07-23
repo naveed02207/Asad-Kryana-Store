@@ -1,14 +1,44 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Store, LayoutDashboard, Package, Users, FileText, LogOut, Banknote } from 'lucide-react';
+import { Store, LayoutDashboard, Package, Users, FileText, LogOut, Banknote, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { api } from '../lib/api';
 
 export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pin, setPin] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogout = async () => {
-    // Just a placeholder since no auth is used anymore
+  useEffect(() => {
+    const token = localStorage.getItem('admin_token');
+    if (token === 'admin_token_123') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.verifyPin(pin);
+      if (res.success) {
+        localStorage.setItem('admin_token', res.token);
+        setIsAuthenticated(true);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Invalid PIN');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_token');
+    setIsAuthenticated(false);
     navigate('/admin');
   };
 
@@ -20,6 +50,62 @@ export function AdminLayout() {
     { name: 'Reports', path: '/admin/reports', icon: FileText },
     { name: 'Customer View', path: '/customer', icon: Users },
   ];
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
+            Admin Login
+          </h2>
+          <p className="mt-2 text-center text-sm text-slate-400">
+            Enter your PIN to access the dashboard
+          </p>
+        </div>
+
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+            <form className="space-y-6" onSubmit={handleLogin}>
+              <div>
+                <label htmlFor="pin" className="block text-sm font-medium text-slate-700">
+                  PIN Code
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-slate-400" aria-hidden="true" />
+                  </div>
+                  <input
+                    id="pin"
+                    name="pin"
+                    type="password"
+                    required
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    className="focus:ring-emerald-500 focus:border-emerald-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2 border"
+                    placeholder="Enter PIN"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-red-600 text-sm">{error}</div>
+              )}
+
+              <div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
+                >
+                  {loading ? 'Verifying...' : 'Sign in'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-slate-100 text-slate-800 font-sans overflow-hidden">
@@ -59,11 +145,12 @@ export function AdminLayout() {
         </nav>
         
         <div className="p-4 bg-slate-950/50 border-t border-slate-800 text-[11px] text-slate-400">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center cursor-pointer hover:text-white" onClick={handleLogout}>
             <div className="flex flex-col">
               <span className="text-white font-semibold text-xs">Admin</span>
-              <span>Store Owner</span>
+              <span>Logout</span>
             </div>
+            <LogOut className="w-4 h-4" />
           </div>
         </div>
       </aside>
