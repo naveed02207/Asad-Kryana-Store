@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Asad Karyana Store POS",
+  "description": "Point of Sale, Inventory Management, Customer Khata Ledger, and Real-time Analytics System for Asad Karyana Store.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
